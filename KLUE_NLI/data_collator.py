@@ -1,10 +1,12 @@
-from transformers import DataCollatorWithPadding
+from dataclasses import dataclass
+from transformers import DataCollatorWithPadding, DefaultDataCollator
 from typing import List, Dict, Any
 import numpy as np
 import torch
 
-class DataCollatorForSIC(DataCollatorWithPadding):
-    def __call__(self, features: List[Dict[str, Any]], max_len: int = None, fill_values: List[float] = None) -> Dict[str, Any]:
+@dataclass
+class DataCollatorForSIC(DefaultDataCollator):
+    def __call__(self, features: List[Dict[str, Any]], max_len: int = None, fill_values: List[float] = [1, 0, 0]) -> Dict[str, Any]:
         # https://github.com/ShannonAI/Self_Explaining_Structures_Improve_NLP_Models
         """
         pad to maximum length of this batch
@@ -16,7 +18,7 @@ class DataCollatorForSIC(DataCollatorWithPadding):
             output: list of field batched data, which shape is [batch, max_length]
         """
         # [batch, num_fields]
-        batch = [[torch.LongTensor() for value in values] for values in features.values()]
+        batch = [[torch.LongTensor([value]) if isinstance(value, int) else torch.LongTensor(value) for value in values.values()] for values in features]
         lengths = np.array([[len(field_data) for field_data in sample] for sample in batch])
         batch_size, num_fields = lengths.shape
         fill_values = fill_values or [0.0] * num_fields

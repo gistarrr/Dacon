@@ -3,25 +3,12 @@ import torch.nn as nn
 
 from transformers import RobertaPreTrainedModel, RobertaModel
 
-class RobertaForSequenceClassification(RobertaPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.config = config
-
-        self.roberta = RobertaModel(config, add_pooling_layer=False)
-        self.classifier = RobertaClassificationHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
 class ExplainableModel(RobertaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
+        print("######### loading Custom Model #########")
         self.num_labels = config.num_labels
         self.config = config
 
@@ -37,19 +24,19 @@ class ExplainableModel(RobertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, input_ids=None, start_indexs=None, end_indexs=None, span_masks=None):
+    def forward(self, input_ids=None, start_indexs=None, end_indexs=None, span_masks=None, labels=None, length=None):
         # generate mask
         attention_mask = (input_ids != 1).long()
         # intermediate layer
-        hidden_states, first_token = self.roberta(input_ids, attention_mask=attention_mask)  # output.shape = (bs, length, hidden_size)
+        hidden_states = self.roberta(input_ids, attention_mask=attention_mask)[0]  # output.shape = (bs, length, hidden_size)
         hidden_states = self.dropout(hidden_states)
         # span info collecting layer(SIC)
         h_ij = self.span_info_collect(hidden_states, start_indexs, end_indexs)
         # interpretation layer
         H, a_ij = self.interpretation(h_ij, span_masks)
         # output layer
-        out = self.classifier(self.dropout(H))
-        return out, a_ij
+        logits = self.classifier(self.dropout(H))
+        return logits, a_ij
 
 class SICModel(nn.Module):
     def __init__(self, hidden_size):
@@ -108,8 +95,7 @@ class RobertaClassificationHead(nn.Module):
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
     def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
+        x = self.dropout(features)
         x = self.dense(x)
         x = torch.tanh(x)
         x = self.dropout(x)

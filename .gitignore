@@ -2,7 +2,9 @@ __pycache__
 
 .ipynb*
 .DS_Store
+.tmp*
 
+checkpoint/
 input/
 output/
 

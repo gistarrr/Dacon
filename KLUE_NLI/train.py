@@ -9,7 +9,6 @@ from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
     Trainer,
-    TrainingArguments,
     HfArgumentParser,
     DataCollatorWithPadding,
     EarlyStoppingCallback    
@@ -17,10 +16,10 @@ from transformers import (
 
 from datasets import load_metric
 
-from arguments import ModelArguments, DataTrainingArguments
+from arguments import ModelArguments, DataTrainingArguments, MyTrainingArguments
 from data import load_data, preprocess_function
-from data_collator import DataCollatorForSIC
-from trainer import SICTrainer
+from data_collator import DataCollatorForSIC, DataCollatorWithPadding
+from trainer import CustomTrainer
 from model import ExplainableModel
 
 
@@ -46,27 +45,24 @@ def compute_metrics(EvalPrediction):
 
 def main():
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments)
+        (ModelArguments, DataTrainingArguments, MyTrainingArguments)
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
+    
     seed_everything(1)
-
-    if training_args.do_eval :
-        train_dataset, validation_dataset = load_data(PATH, ratio = 0.2)
-    else :
-        train_dataset= load_data(PATH, ratio = 0)
+    
+    train_dataset, validation_dataset = load_data(training_args, PATH)
+    print(f"#### train_dataset length : {len(train_dataset)} ####")
+    print(f"#### validation_dataset length : {len(validation_dataset)} ####")
 
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
-    model = ExplainableModel.from_pretrained(model_args.model_name_or_path, num_labels=3) if model_args.use_SIC else AutoModelForSequenceClassification(model_args.model_name_or_path, num_labels=3)
-
-    print(model)
+    model = ExplainableModel.from_pretrained(model_args.model_name_or_path, num_labels=3) if training_args.use_SIC else AutoModelForSequenceClassification.from_pretrained(model_args.model_name_or_path, num_labels=3)
 
     column_names = train_dataset.column_names
-    prep_fn  = partial(preprocess_function, tokenizer=tokenizer, model_args=model_args)
+    prep_fn  = partial(preprocess_function, tokenizer=tokenizer, args=training_args)
     
-    print(model_args.use_SIC)
+    print(f"#### Tokenized dataset !!! ####")
 
     train_dataset = train_dataset.map(
         prep_fn,
@@ -86,25 +82,23 @@ def main():
             load_from_cache_file=False,
             desc="Running tokenizer on validation dataset",
         )
-
-    data_collator = DataCollatorForSIC(tokenizer=tokenizer) if model_args.use_SIC else DataCollatorWithPadding(tokenizer=tokenizer)
-
-    if model_args.use_SIC :
-        pass
-        # trainer = SICTrainer(
-
-        # )
-    else :
-        trainer = Trainer(
-            model=model,
-            args=training_args,
-
-        )
-
-
-    breakpoint()
-    print('end')
-
+        
+    data_collator = DataCollatorForSIC() if training_args.use_SIC else DataCollatorWithPadding(tokenizer=tokenizer)
+    
+    trainer = CustomTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=validation_dataset,
+        compute_metrics=compute_metrics,  # define metrics function
+        data_collator=data_collator,
+        tokenizer=tokenizer,
+        callbacks = [EarlyStoppingCallback(early_stopping_patience=3)] if training_args.do_eval else None
+    )
+        
+    train_result = trainer.train()
+    
+    trainer.save_model("/content/drive/Othercomputers/내 컴퓨터/KLUE_NLI/results")
 
 if __name__ == '__main__':
     main()

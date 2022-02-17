@@ -14,15 +14,35 @@ class ModelArguments :
 
 @dataclass
 class DataTrainingArguments:
-    pass
+    save_path: str = field(
+        default="./checkpoints/roberta-large",
+        metadata={
+            "help": "Path to pretrained model or model identifier from local"
+        },
+    )
+    output_name: str = field(
+        default="./output/roberta-large",
+        metadata={
+            "help": "Path to pretrained model or model identifier from local"
+        },
+    )
 
 @dataclass
 class MyTrainingArguments(TrainingArguments):
     use_SIC : bool = field(
         default=False
     )
+    use_rdrop : bool = field(
+        default=False
+    )
     lamb : float = field(
         default=1.0,
+        metadata={
+            "help" : "regularizer lambda"
+        }
+    )
+    alpha : float = field(
+        default=5,
         metadata={
             "help" : "regularizer lambda"
         }

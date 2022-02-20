@@ -29,6 +29,9 @@ class DataTrainingArguments:
 
 @dataclass
 class MyTrainingArguments(TrainingArguments):
+    do_eval : bool = field(
+        default=False
+    )
     use_SIC : bool = field(
         default=False
     )
@@ -42,9 +45,25 @@ class MyTrainingArguments(TrainingArguments):
         }
     )
     alpha : float = field(
-        default=5,
+        default=1,
         metadata={
             "help" : "regularizer lambda"
         }
     )
-    
+    report_to: Optional[str] = field(
+        default='wandb',
+    )
+
+@dataclass
+class LoggingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+    """
+    dotenv_path: Optional[str] = field(
+        default='./wandb.env',
+        metadata={"help":'input your dotenv path'},
+    )
+    project_name: Optional[str] = field(
+        default="KLUE-NLI",
+        metadata={"help": "project name"},
+    )

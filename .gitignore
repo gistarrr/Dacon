@@ -7,5 +7,9 @@ __pycache__
 checkpoints/
 input/
 output/
+wandb/
+
+wandb.env
+실험일지*
 
 Self_Explaining_Structures_Improve_NLP_Models/

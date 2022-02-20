@@ -59,81 +59,6 @@ class CustomTrainer(Trainer):
             return dataset
         else:
             return dataset.remove_columns(ignored_columns)
-        
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
-        """
-        Perform a training step on a batch of inputs.
-
-        Subclass and override to inject custom behavior.
-
-        Args:
-            model (`nn.Module`):
-                The model to train.
-            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
-                The inputs and targets of the model.
-
-                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
-                argument `labels`. Check your model's documentation for all accepted arguments.
-
-        Return:
-            `torch.Tensor`: The tensor with training loss on this batch.
-        """
-        if not self.args.use_SIC and self.args.use_rdrop:
-            model.train()
-            inputs = self._prepare_inputs(inputs)
-            
-            with self.autocast_smart_context_manager():
-                loss = self.compute_loss(model, inputs)
-
-            if self.args.n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu parallel training
-
-            if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
-                # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
-                loss = loss / self.args.gradient_accumulation_steps
-
-            if self.do_grad_scaling:
-                self.scaler.scale(loss).backward()
-            elif self.use_apex:
-                with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                    scaled_loss.backward()
-            elif self.deepspeed:
-                # loss gets scaled under gradient_accumulation_steps in deepspeed
-                loss = self.deepspeed.backward(loss)
-            else:
-                loss.backward()
-
-            return loss.detach()
-        
-        elif self.args.use_SIC:        
-            model.train()
-            inputs = self._prepare_inputs(inputs)
-
-            with self.autocast_smart_context_manager():
-                loss = self.compute_loss(model, inputs)
-
-            if self.args.n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu parallel training
-
-            if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
-                # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
-                loss = loss / self.args.gradient_accumulation_steps
-                
-            if self.do_grad_scaling:
-                self.scaler.scale(loss).backward()
-            elif self.use_apex:
-                with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                    scaled_loss.backward()
-            elif self.deepspeed:
-                # loss gets scaled under gradient_accumulation_steps in deepspeed
-                loss = self.deepspeed.backward(loss)
-            else:
-                loss.backward()
-
-            return loss.detach()
-        
-        else :
-            return super().training_step(model, inputs)
     
     def prediction_step(
         self,
@@ -218,37 +143,80 @@ class CustomTrainer(Trainer):
         Subclass and override for custom behavior.
         """
         # 기본 모델에 Rdrop 적용
-        if not self.args.use_SIC and self.args.use_rdrop :
+        if self.args.use_SIC and self.args.use_rdrop:
             if "labels" in inputs:
                 labels = inputs.pop("labels").view(-1)
             else:
                 labels = None
-            
-            outputs = model(**inputs)
-            logits = outputs["logits"] if isinstance(outputs, dict) else outputs[0]
-            outputs2 = model(**inputs)
-            logits2 = outputs2["logits"] if isinstance(outputs2, dict) else outputs2[0]
-            
+                
+            if labels is not None:
+                outputs = model(**inputs)
+                logits, a_ij = outputs
+                outputs2 = model(**inputs)
+                logits2, a_ij_2 = outputs2
+            else :
+                outputs = model(**inputs)
             # Save past state if it exists
             # TODO: this needs to be fixed and made cleaner later.
             if self.args.past_index >= 0:
                 self._past = outputs[self.args.past_index]
 
             if labels is not None:
-                if self.label_smoother is None:
-                    loss_fct = nn.CrossEntropyLoss()
-                    loss =loss_fct(logits, labels) + loss_fct(logits2, labels)
-                else :
-                    loss = self.label_smoother(outputs, labels) + self.label_smoother(outputs2, labels)
-                kl_loss = self.compute_kl_loss(logits, logits2)
-                loss += self.args.alpha * kl_loss
+                new_label = torch.zeros(len(labels), 3)
+                for i in range(len(labels)):
+                    new_label[i][labels[i]] = 1
+                new_label = new_label.to(self.args.device)
+                loss_fct = nn.CrossEntropyLoss()
+                rdrop_loss_fct = nn.MSELoss()
+                mse_loss = rdrop_loss_fct(new_label, logits) + rdrop_loss_fct(new_label, logits2)
+                rdrop_loss = self.args.alpha * rdrop_loss_fct(logits, logits2) + mse_loss
+                ce_loss = loss_fct(logits, labels) if self.label_smoother is None else self.label_smoother(outputs, labels)
+                reg_loss = self.args.lamb * a_ij.pow(2).sum(dim=1).mean()
+                loss = ce_loss + reg_loss + rdrop_loss
             else:
                 # We don't use .loss here since the model may return tuples instead of ModelOutput.
                 loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+            return (loss, outputs) if return_outputs else loss  
+                
+        elif not self.args.use_SIC and self.args.use_rdrop :
+            if "labels" in inputs:
+                labels = inputs.pop("labels").view(-1)
+            else:
+                labels = None
+            
+            if labels is not None:
+                outputs = model(**inputs)
+                logits = outputs["logits"] if isinstance(outputs, dict) else outputs[0]
+                outputs2 = model(**inputs)
+                logits2 = outputs2["logits"] if isinstance(outputs2, dict) else outputs2[0]
+            else :
+                outputs = model(**inputs)
+            # Save past state if it exists
+            # TODO: this needs to be fixed and made cleaner later.
+            if self.args.past_index >= 0:
+                self._past = outputs[self.args.past_index]
 
+            if labels is not None:
+                new_label = torch.zeros(len(labels), 3)
+                for i in range(len(labels)):
+                    new_label[i][labels[i]] = 1
+                new_label = new_label.to(self.args.device)
+                loss_fct = nn.MSELoss()
+                mse_loss =loss_fct(new_label, logits) + loss_fct(new_label, logits2)
+                loss = self.args.alpha * loss_fct(logits, logits2) + mse_loss
+                # if self.label_smoother is None:
+                #     loss_fct = nn.CrossEntropyLoss()
+                #     loss = 0.5 * (loss_fct(logits, labels) + loss_fct(logits2, labels))
+                # else :
+                #     loss = 0.5 * (self.label_smoother(outputs, labels) + self.label_smoother(outputs2, labels))
+                # kl_loss = self.compute_kl_loss(logits, logits2)
+                # loss += self.args.alpha * kl_loss
+            else:
+                # We don't use .loss here since the model may return tuples instead of ModelOutput.
+                loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
             return (loss, outputs) if return_outputs else loss
         
-        elif self.args.use_SIC :    
+        elif self.args.use_SIC :  
             if "labels" in inputs:
                 labels = inputs.pop("labels").view(-1)
             else:

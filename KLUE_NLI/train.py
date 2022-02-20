@@ -3,6 +3,7 @@ from sklearn.decomposition import TruncatedSVD
 import torch
 import numpy as np
 import random
+from dotenv import load_dotenv
 
 from functools import partial
 from transformers import (
@@ -14,9 +15,11 @@ from transformers import (
     EarlyStoppingCallback    
 )
 
+import wandb
+
 from datasets import load_metric
 
-from arguments import ModelArguments, DataTrainingArguments, MyTrainingArguments
+from arguments import ModelArguments, DataTrainingArguments, MyTrainingArguments, LoggingArguments
 from data import load_train_data, preprocess_function
 from data_collator import DataCollatorForSIC, DataCollatorWithPadding
 from trainer import CustomTrainer
@@ -30,12 +33,14 @@ ID2LABEL = {v: k for k, v in LABEL2ID.items()}
 
 
 def seed_everything(seed):
+    os.environ['PYTHONHASHSEED'] = str(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
+    np.random.default_rng(seed)
     random.seed(seed)
 
 def compute_metrics(EvalPrediction):
@@ -46,23 +51,17 @@ def compute_metrics(EvalPrediction):
 
 def main():
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, MyTrainingArguments)
+        (ModelArguments, DataTrainingArguments, MyTrainingArguments, LoggingArguments)
     )
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    model_args, data_args, training_args, logging_args = parser.parse_args_into_dataclasses()
     
     seed_everything(1)
     
     train_dataset, validation_dataset = load_train_data(training_args, PATH)
-    print(f"#### train dataset length : {len(train_dataset)} ####")
-    print(f"#### validation dataset length : {len(validation_dataset)} ####")
 
-    config = AutoConfig.from_pretrained(model_args.model_name_or_path)
-    config.num_labels = 3
+    print(f"#### Example of train data : {train_dataset[0]['premise'], train_dataset[0]['hypothesis']} ####")
     
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
-    model = ExplainableModel.from_pretrained(model_args.model_name_or_path, config=config) if training_args.use_SIC else AutoModelForSequenceClassification.from_pretrained(model_args.model_name_or_path, config=config)
-    print(model)
     
     column_names = train_dataset.column_names
     prep_fn  = partial(preprocess_function, tokenizer=tokenizer, args=training_args)
@@ -90,14 +89,34 @@ def main():
         
     data_collator = DataCollatorForSIC() if training_args.use_SIC else DataCollatorWithPadding(tokenizer=tokenizer)
     
+    
+    def model_init():
+        if training_args.use_SIC :
+            model = ExplainableModel.from_pretrained("leeeki/roberta-large_Explainable")
+        else :
+            model = AutoModelForSequenceClassification.from_pretrained(model_args.model_name_or_path, num_labels=3)
+        return model
+    
+    # wandb
+    load_dotenv(dotenv_path=logging_args.dotenv_path)
+    WANDB_AUTH_KEY = os.getenv("WANDB_AUTH_KEY")
+    wandb.login(key=WANDB_AUTH_KEY)
+
+    wandb.init(
+        entity="leeeki",
+        project=logging_args.project_name,
+        name=training_args.run_name
+    )
+    wandb.config.update(training_args)
+    
     trainer = CustomTrainer(
-        model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
         compute_metrics=compute_metrics,  # define metrics function
         data_collator=data_collator,
         tokenizer=tokenizer,
+        model_init = model_init,
         callbacks = [EarlyStoppingCallback(early_stopping_patience=5)] if training_args.do_eval else None
     )
     

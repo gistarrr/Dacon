@@ -1,20 +1,25 @@
-# python train.py \
-# --model_name_or_path klue/roberta-large \
-# --do_train \
-# --do_eval \
-# --output_dir ./results \
-# --save_total_limit 3 \
-# --save_strategy epoch \
-# --num_train_epochs 5 \
-# --learning_rate 3e-5 \
-# --per_device_train_batch_size 16 \
-# --per_device_eval_batch_size 32 \
-# --gradient_accumulation_steps 1 \
-# --evaluation_strategy epoch \
-# --load_best_model_at_end True \
-# --metric_for_best_model accuracy \
-# --no_cuda True \
-# --use_SIC True
+python train.py \
+--run_name Explainable_test2 \
+--model_name_or_path klue/roberta-large \
+--do_train \
+--do_eval \
+--save_path ./checkpoints/Explainable_test \
+--output_dir ./checkpoints/test \
+--overwrite_output_dir True \
+--save_total_limit 5 \
+--save_strategy steps \
+--num_train_epochs 2 \
+--learning_rate 3e-5 \
+--per_device_train_batch_size 16 \
+--per_device_eval_batch_size 32 \
+--gradient_accumulation_steps 1 \
+--evaluation_strategy steps \
+--logging_steps 1 \
+--eval_steps 250 \
+--load_best_model_at_end True \
+--metric_for_best_model accuracy \
+--use_SIC \
+--no_cuda True
 
 
 # --warmup_steps 10000 \
@@ -24,20 +29,27 @@
 # --adam_epsilon 1e-06 \
 #--label_smoothing_factor 0.1
 
-python inference.py \
---save_path ./checkpoints/Explain_plus \
---output_name Ex_plus_ep10
---do_predict \
---output_dir ./results \
---save_total_limit 3 \
---save_strategy epoch \
---num_train_epochs 5 \
---learning_rate 3e-5 \
---per_device_train_batch_size 16 \
---per_device_eval_batch_size 32 \
---gradient_accumulation_steps 1 \
---evaluation_strategy epoch \
---load_best_model_at_end True \
---metric_for_best_model accuracy \
---no_cuda True \
---use_SIC True
+# python inference.py \
+# --save_path ./checkpoints/krl_3ep \
+# --output_name krl_3ep.csv \
+# --do_predict \
+# --output_dir ./results \
+# --per_device_eval_batch_size 32 \
+# --no_cuda True
+
+# python inference.py \
+# --save_path ./checkpoints/krl_2ep \
+# --output_name krl_2ep.csv \
+# --do_predict \
+# --output_dir ./results \
+# --per_device_eval_batch_size 32 \
+# --no_cuda True
+
+# python inference.py \
+# --save_path ./checkpoints/Explainable_5ep \
+# --use_SIC \
+# --output_name Explainable_5ep.csv \
+# --do_predict \
+# --output_dir ./results \
+# --per_device_eval_batch_size 32 \
+# --no_cuda True

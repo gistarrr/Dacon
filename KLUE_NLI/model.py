@@ -8,7 +8,6 @@ class ExplainableModel(RobertaPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        print("######### Loading Custom Model #########")
         self.num_labels = config.num_labels
         self.config = config
 

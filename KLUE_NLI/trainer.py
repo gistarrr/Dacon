@@ -142,13 +142,12 @@ class CustomTrainer(Trainer):
 
         Subclass and override for custom behavior.
         """
-        # 기본 모델에 Rdrop 적용
         if self.args.use_SIC and self.args.use_rdrop:
             if "labels" in inputs:
                 labels = inputs.pop("labels").view(-1)
             else:
                 labels = None
-                
+            
             if labels is not None:
                 outputs = model(**inputs)
                 logits, a_ij = outputs
@@ -177,7 +176,8 @@ class CustomTrainer(Trainer):
                 # We don't use .loss here since the model may return tuples instead of ModelOutput.
                 loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
             return (loss, outputs) if return_outputs else loss  
-                
+        
+        # 기본 모델에 Rdrop 적용
         elif not self.args.use_SIC and self.args.use_rdrop :
             if "labels" in inputs:
                 labels = inputs.pop("labels").view(-1)
@@ -237,6 +237,7 @@ class CustomTrainer(Trainer):
                 # We don't use .loss here since the model may return tuples instead of ModelOutput.
                 loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
             return (loss, outputs) if return_outputs else loss        
+        
         else:
             return super().compute_loss(model, inputs, return_outputs)
         

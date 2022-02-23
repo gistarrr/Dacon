@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import torch
+import torch.nn.functional as F
 import random
 import numpy as np
 
@@ -43,8 +44,7 @@ def main():
     
     print(f"#### Test dataset length : {len(test_dataset)} ####")
     
-    tokenizer = AutoTokenizer.from_pretrained(data_args.save_path)
-    model = ExplainableModel.from_pretrained(data_args.save_path) if training_args.use_SIC else AutoModelForSequenceClassification.from_pretrained(data_args.save_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
     
     print(f"#### Tokenized dataset !!! ####")
     
@@ -62,17 +62,48 @@ def main():
     
     data_collator = DataCollatorForSIC() if training_args.use_SIC else DataCollatorWithPadding(tokenizer=tokenizer)
     
-    trainer = CustomTrainer(
-        model=model,
-        args=training_args,  # define metrics function
-        data_collator=data_collator,
-        tokenizer=tokenizer,
-    )
-    
-    outputs = trainer.predict(test_dataset)
-    submission = pd.DataFrame({'index':test_df.index, 'label' : outputs[0].argmax(axis=1)})
-    submission['label'] = submission['label'].map(ID2LABEL)
-    submission.to_csv(os.path.join('./output', data_args.output_name), index=False)
+    if data_args.k_fold == 0:
+        model = ExplainableModel.from_pretrained(data_args.save_path) if training_args.use_SIC else AutoModelForSequenceClassification.from_pretrained(data_args.save_path)
+        trainer = CustomTrainer(
+            model=model,
+            args=training_args,  # define metrics function
+            data_collator=data_collator,
+            tokenizer=tokenizer,
+        )
+        
+        outputs = trainer.predict(test_dataset)
+        submission = pd.DataFrame({'index':test_df.index, 'label' : outputs[0].argmax(axis=1)})
+        submission['label'] = submission['label'].map(ID2LABEL)
+        submission.to_csv(os.path.join('./output', data_args.output_name), index=False)
+    else :
+        soft_voting = 0
+        for i in range(data_args.k_fold):
+            print(f"######### Fold : {i+1} !!! ######### ")
+            
+            fold_path = data_args.save_path + f"_fold_{i+1}"
+            model = ExplainableModel.from_pretrained(fold_path) if training_args.use_SIC else AutoModelForSequenceClassification.from_pretrained(fold_path)
+            trainer = CustomTrainer(
+                model=model,
+                args=training_args,  # define metrics function
+                data_collator=data_collator,
+                tokenizer=tokenizer,
+            )
+            
+            outputs = trainer.predict(test_dataset)
+            soft_voting += F.softmax(torch.tensor(outputs[0]), dim=1)
+            
+            # for hard voting
+            submission = pd.DataFrame({'index':test_df.index, 'label' : outputs[0].argmax(axis=1)})
+            submission['label'] = submission['label'].map(ID2LABEL)
+            
+            k_fold_folder_name = os.path.join('./output', data_args.output_name[:-4])
+            os.makedirs(k_fold_folder_name, exist_ok=True)
+            
+            submission.to_csv(os.path.join(k_fold_folder_name, f"fold_{i+1}.csv"), index=False)
+        
+        soft_submission = pd.DataFrame({'index':test_df.index, 'label' : soft_voting.argmax(axis=1)})
+        soft_submission['label'] = soft_submission['label'].map(ID2LABEL)
+        soft_submission.to_csv(os.path.join(k_fold_folder_name, f"soft_voting.csv"), index=False)
     
 if __name__ == "__main__" :
     main()

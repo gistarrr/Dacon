@@ -14,6 +14,9 @@ class ModelArguments :
 
 @dataclass
 class DataTrainingArguments:
+    data_name: str = field(
+        default="train_data.csv",
+    )
     save_path: str = field(
         default="./checkpoints/roberta-large",
         metadata={
@@ -26,10 +29,19 @@ class DataTrainingArguments:
             "help": "Path to pretrained model or model identifier from local"
         },
     )
+    aeda : bool = field(
+        default=False
+    )
+    k_fold : int = field(
+        default=0,
+    )
 
 @dataclass
 class MyTrainingArguments(TrainingArguments):
     do_eval : bool = field(
+        default=False
+    )
+    use_lstm : bool = field(
         default=False
     )
     use_SIC : bool = field(

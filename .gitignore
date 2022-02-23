@@ -8,6 +8,7 @@ checkpoints/
 input/
 output/
 wandb/
+wandb (1)/
 
 wandb.env
 실험일지*

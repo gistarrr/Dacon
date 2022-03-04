@@ -32,6 +32,12 @@ class DataTrainingArguments:
     aeda : bool = field(
         default=False
     )
+    train_rtt : bool = field(
+        default=False
+    )
+    valid_rtt : bool = field(
+        default=False
+    )
     k_fold : int = field(
         default=0,
     )
@@ -76,6 +82,6 @@ class LoggingArguments:
         metadata={"help":'input your dotenv path'},
     )
     project_name: Optional[str] = field(
-        default="KLUE-NLI",
+        default="KLUE-NLI_FINAL",
         metadata={"help": "project name"},
     )

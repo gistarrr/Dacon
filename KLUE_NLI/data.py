@@ -12,7 +12,7 @@ ID2LABEL = {v: k for k, v in LABEL2ID.items()}
 
 def load_aeda_data(train_df, path):
     print("######### Adding aeda data #########")
-    aeda_df = pd.read_csv(os.path.join(path,'train_aeda.csv'))
+    aeda_df = pd.read_csv(os.path.join(path,'validation_aeda.csv'))
     aeda_df['label'] = aeda_df['label'].map(LABEL2ID)
     print(f"#### Aeda dataset length : {len(aeda_df)} ####")
     if isinstance(train_df, pd.DataFrame):
@@ -21,6 +21,32 @@ def load_aeda_data(train_df, path):
     elif isinstance(train_df, Dataset):
         aeda_dataset = Dataset.from_pandas(aeda_df)
         train_df = concatenate_datasets([train_df, aeda_dataset]).shuffle(seed=42)
+    return train_df
+
+def load_train_rtt_data(train_df, path):
+    print("######### Adding Train RTT data #########")
+    rtt_df = pd.read_csv(os.path.join(path,'train_rtt.csv'))
+    rtt_df['label'] = rtt_df['label'].map(LABEL2ID)
+    print(f"#### Train RTT dataset length : {len(rtt_df)} ####")
+    if isinstance(train_df, pd.DataFrame):
+        train_df = pd.concat([train_df, rtt_df]).reset_index(drop=True)
+        train_df['index'] = train_df.index
+    elif isinstance(train_df, Dataset):
+        rtt_dataset = Dataset.from_pandas(rtt_df)
+        train_df = concatenate_datasets([train_df, rtt_dataset]).shuffle(seed=42)
+    return train_df
+
+def load_valid_rtt_data(train_df, path):
+    print("######### Adding Valid RTT data #########")
+    rtt_df = pd.read_csv(os.path.join(path,'validation_rtt.csv'))
+    rtt_df['label'] = rtt_df['label'].map(LABEL2ID)
+    print(f"#### RTT dataset length : {len(rtt_df)} ####")
+    if isinstance(train_df, pd.DataFrame):
+        train_df = pd.concat([train_df, rtt_df]).reset_index(drop=True)
+        train_df['index'] = train_df.index
+    elif isinstance(train_df, Dataset):
+        rtt_dataset = Dataset.from_pandas(rtt_df)
+        train_df = concatenate_datasets([train_df, rtt_dataset]).shuffle(seed=42)
     return train_df
 
 def load_train_data(args, path):

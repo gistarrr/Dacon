@@ -18,7 +18,7 @@ from sklearn.model_selection import StratifiedKFold
 import wandb
 
 from arguments import ModelArguments, DataTrainingArguments, MyTrainingArguments, LoggingArguments
-from data import load_train_data, preprocess_function, load_aeda_data
+from data import load_train_data, preprocess_function, load_aeda_data, load_train_rtt_data, load_valid_rtt_data
 from data_collator import DataCollatorForSIC, DataCollatorWithPadding
 from trainer import CustomTrainer
 from model import ExplainableModel, RobertaLSTM
@@ -72,6 +72,15 @@ def main():
     elif not training_args.do_eval:
         train_dataset = concatenate_datasets([train_dataset, validation_dataset]).shuffle(seed=training_args.seed)
         validation_dataset = None
+        if data_args.aeda :
+            train_dataset = load_aeda_data(train_dataset, PATH)
+            print(f"#### Train dataset length : {len(train_dataset)} ####")
+        if data_args.train_rtt :
+            train_dataset = load_train_rtt_data(train_dataset, PATH)
+            print(f"#### Train dataset length : {len(train_dataset)} ####")
+        if data_args.valid_rtt :
+            train_dataset = load_valid_rtt_data(train_dataset, PATH)
+            print(f"#### Train dataset length : {len(train_dataset)} ####")
         print(f"#### Total dataset length : {len(train_dataset)} ####")
         print("-"*100)
         print(f"#### Example of total dataset : {train_dataset[0]['premise'], train_dataset[0]['hypothesis']} ####")
@@ -82,6 +91,15 @@ def main():
     prep_fn  = partial(preprocess_function, tokenizer=tokenizer, args=training_args)
     
     print(f"#### Tokenized dataset !!! ####")
+
+    def model_init():
+        if training_args.use_SIC :
+            model = ExplainableModel.from_pretrained("leeeki/roberta-large_Explainable")
+        elif training_args.use_lstm :
+            model = RobertaLSTM.from_pretrained(model_args.model_name_or_path, num_labels=3)
+        else :
+            model = AutoModelForSequenceClassification.from_pretrained(model_args.model_name_or_path, num_labels=3)
+        return model
     
     if data_args.k_fold == 0:
         train_dataset = train_dataset.map(
@@ -104,16 +122,6 @@ def main():
             )
             
         data_collator = DataCollatorForSIC() if training_args.use_SIC else DataCollatorWithPadding(tokenizer=tokenizer)
-        
-        
-        def model_init():
-            if training_args.use_SIC :
-                model = ExplainableModel.from_pretrained("leeeki/roberta-large_Explainable")
-            elif training_args.use_SIC :
-                model = RobertaLSTM.from_pretrained(model_args.model_name_or_path, num_labels=3)
-            else :
-                model = AutoModelForSequenceClassification.from_pretrained(model_args.model_name_or_path, num_labels=3)
-            return model
         
         # wandb
         load_dotenv(dotenv_path=logging_args.dotenv_path)
@@ -158,16 +166,23 @@ def main():
             trainer.log_metrics("eval", metrics)
             trainer.save_metrics("eval", metrics)
             
-    elif data_args.k_fold == 5:
+    else:
         skf = StratifiedKFold(n_splits=data_args.k_fold, shuffle=True)
     
         for i, (train_idx, valid_idx) in enumerate(skf.split(total_dataset, total_dataset['label'])):
-            
+            # if i == 0 or i==1 or i==2 :
+            #     continue
             print(f"######### Fold : {i+1} !!! ######### ")
             train_fold = total_dataset.select(train_idx.tolist())
             
             if data_args.aeda :
                 train_fold = load_aeda_data(train_fold, PATH)
+                print(f"#### Train dataset length : {len(train_fold)} ####")
+            if data_args.train_rtt :
+                train_fold = load_train_rtt_data(train_fold, PATH)
+                print(f"#### Train dataset length : {len(train_fold)} ####")
+            if data_args.valid_rtt :
+                train_fold = load_valid_rtt_data(train_fold, PATH)
                 print(f"#### Train dataset length : {len(train_fold)} ####")
             
             valid_fold = total_dataset.select(valid_idx.tolist())
@@ -190,21 +205,12 @@ def main():
             )
             
             data_collator = DataCollatorForSIC() if training_args.use_SIC else DataCollatorWithPadding(tokenizer=tokenizer)
-        
-            def model_init():
-                if training_args.use_SIC :
-                    model = ExplainableModel.from_pretrained("leeeki/roberta-large_Explainable")
-                else :
-                    model = AutoModelForSequenceClassification.from_pretrained(model_args.model_name_or_path, num_labels=3)
-                return model
             
             # wandb
             load_dotenv(dotenv_path=logging_args.dotenv_path)
             WANDB_AUTH_KEY = os.getenv("WANDB_AUTH_KEY")
             wandb.login(key=WANDB_AUTH_KEY)
 
-            print(training_args.output_dir)
-                        
             wandb.init(
                 entity="leeeki",
                 project=logging_args.project_name,

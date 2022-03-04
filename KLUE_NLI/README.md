@@ -50,10 +50,11 @@ KLUE_NLI/
 ├── trainer.py
 ├── running.ipynb
 ├── crawling_papago_rtt.ipynb
-└──ensemble_voting.ipynb
+└── ensemble_voting.ipynb
 ```
 
 - `inputs/` : 모델 학습에 필요한 데이터
+- `aeda.ipynb` : 데이터 Augumentation 기법 중 하나인 Aeda 기법 적용
 - `data_collator.py` : 모델에 맞는 Data Collator 정의
 - `data.py` : 데이터 불러오기
 - `train.py` : 단일 모델 및 k-fold 모델 학습
@@ -61,6 +62,7 @@ KLUE_NLI/
 - `model.py` : Custom Model
 - `inference.py` : 단일 모델 및 k-fold 모델 결과 생성
 - `running.ipynb` : 코랩 환경에서 실행할 수 있는 노트북 파일
+- `crawling_papago_rtt.ipynb` : RTT(round-trip translation)를 위한 파파고 번역기를 이용하는 셀레니움 코드
 - `ensemble_voting.ipynb` : 여러 모델을 앙상블
 
 ## Solution
